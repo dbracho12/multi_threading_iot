@@ -1,3 +1,4 @@
+# 1 Definir la funciones.
 import time
 import json
 import random
@@ -9,9 +10,7 @@ from dotenv import dotenv_values
 
 config = dotenv_values()
 
-# ----------------------
-# Aquí crear los callbacks de MQTT Local
-# Aquí crear el callback on_connect_local
+#----------------------------- Funsion callback local Topicoas local-----------------#
 def on_connect_local(client, userdata, flags, rc):
     if rc == 0:
         print("Mqtt Local conectado")
@@ -26,8 +25,7 @@ def on_connect_local(client, userdata, flags, rc):
     else:
         print(f"Mqtt Local connection faild, error code={rc}")
 
-
-# Aquí crear el callback on_message_local
+#----------------------------- Funsion callback on_message_local-----------------#
 def on_message_local(client, userdata, message):
     queue_local = userdata["queue_local"]
     topico = message.topic
@@ -35,8 +33,7 @@ def on_message_local(client, userdata, message):
 
     queue_local.put({"topico": topico, "mensaje": mensaje})
 
-
-# Aquí crear el callback procesamiento_local
+#----------------------------- Funsion callback procesamiento_local-----------------#
 def procesamiento_local(name, flags, client_local, client_remoto):
     print("Comienza thread", name)
     queue = client_local._userdata["queue_local"]
@@ -61,10 +58,7 @@ def procesamiento_local(name, flags, client_local, client_remoto):
 
     print("Termina thread", name)
 
-# ----------------------
-# ----------------------
-# Aquí crear los callbacks de MQTT Remoto
-
+#----------------------------- Funsion callback on_connect_remoto-----------------#
 def on_connect_remoto(client, userdata, flags, rc):
     if rc == 0:
         print("Mqtt Remoto conectado")
@@ -74,13 +68,13 @@ def on_connect_remoto(client, userdata, flags, rc):
         client.subscribe(config["DASHBOARD_TOPICO_BASE"] + "actuadores/luces/1")
         client.subscribe(config["DASHBOARD_TOPICO_BASE"] + "actuadores/motores/#")
         client.subscribe(config["DASHBOARD_TOPICO_BASE"] + "actuadores/joystick")
+        client.subscribe(config["DASHBOARD_TOPICO_BASE"] + "keepalive/request")
         #client.subscribe(config["DASHBOARD_TOPICO_BASE"] + "sensores/gps")
         #client.subscribe(config["DASHBOARD_TOPICO_BASE"] + "sensores/inerciales")
     else:
         print(f"Mqtt Remoto connection faild, error code={rc}")
 
-
-# Aquí crear el callback on_message_remoto
+#----------------------------- Funsion callback on_message_remoto-----------------#
 def on_message_remoto(client, userdata, message):
     queue_remoto = userdata["queue_remoto"]
     topico = message.topic
@@ -89,7 +83,7 @@ def on_message_remoto(client, userdata, message):
     queue_remoto.put({"topico": topico,"mensaje": mensaje})
 
 
-# Aquí crear el callback procesamiento_remoto
+#----------------------------- Funsion callback procesamiento_remoto-----------------#
 def procesamiento_remoto(name,queue_remoto,client_local, flags):
     print(name,"thread comienza")
     while True:
@@ -101,6 +95,9 @@ def procesamiento_remoto(name,queue_remoto,client_local, flags):
         topico_local = topico.replace(config["DASHBOARD_TOPICO_BASE"], '')
         # Agregar el destintivo de que el mensaje viene del dashboard
         topico_local = "dashboardiot/" + topico_local
+        #--------analisis del keepalive-------------
+        if topico == "monitoreo/keepalive/request":
+            client_remoto.publish("keepalive/ack", 1)
         print("Dato recibido de espacio -topico:", topico_local)
         print("Dato recibido del espacio -mensaje:",mensaje)
 
@@ -108,24 +105,16 @@ def procesamiento_remoto(name,queue_remoto,client_local, flags):
         # acutadores o sensores estén al tanto de lo recibido
         client_local.publish(topico_local, mensaje)
 
+#----------------------------- Funsion callback finalizar_programa---------------#
 
-
-# ----------------------
-
-# Flags que almacenaremos para todos los threads en comun
-# como por ejemplo el flag que indica que debe terminarse el thread
-# Recordar que no se debe pasar al threads variables tipo bool, int o string,
-# siempre usar un objeto (como en este caso un diccionario)
 flags = {"thread_continue": True}
 def finalizar_programa(sig, frame):
     global flags
     print("Señal de terminar programa")    
     flags["thread_continue"] = False
 
-
 if __name__ == "__main__":    
-    # ----------------------
-    # Aquí conectarse a MQTT remoto
+    # ---------------------- conectarse a MQTT remoto ----------------------#
     queue_remoto = Queue()
 
     random_id = random.randint(1, 999)
@@ -143,8 +132,7 @@ if __name__ == "__main__":
     client_remoto.connect(config["DASHBOARD_MQTT_BROKER"], int(config["DASHBOARD_MQTT_PORT"]))
     client_remoto.loop_start()
 
-
-    # Aquí conectarse a MQTT local
+    # ---------------------- conectarse a MQTT local ----------------------#
     queue_local = Queue()
 
     client_local = paho.Client("gps_mock_local")
@@ -159,11 +147,10 @@ if __name__ == "__main__":
     client_local.connect(config["BROKER"], int(config["PORT"]))
     client_local.loop_start()
 
-
-    # Capturar el finalizar programa forzado
+     # ----------Capturar el finalizar programa forzado -------------------------#
     signal.signal(signal.SIGINT, finalizar_programa)
 
-    # El programa principal solo armará e invocará threads
+     #--------Se invocará threads para el procc_local y procc_remoto -----------#
     print("Lanzar thread de procesamiento de MQTT local")
     thread_procesamiento_local = threading.Thread(target=procesamiento_local, args=("procesamiento_local", flags, client_local, client_remoto), daemon=True)
     thread_procesamiento_local.start()
@@ -173,7 +160,7 @@ if __name__ == "__main__":
         daemon =True
     )
     thread_procesamiento_remoto.start()
-
+    
     # ----------------------
     # El programa principal queda a la espera de que se desee
     # finalizar el programa

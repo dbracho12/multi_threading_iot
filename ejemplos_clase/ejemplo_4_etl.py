@@ -27,7 +27,8 @@ def on_connect_local(client, userdata, flags, rc):
         print(f"Mqtt Local connection faild, error code={rc}")
 
 
-# Aquí crear el callback on_message_local
+# Aquí crear el callback on_message_local (Productor) 
+#produce los topicosde on_connect_local
 def on_message_local(client, userdata, message):
     queue = userdata["queue"]
     topico = message.topic
@@ -36,8 +37,36 @@ def on_message_local(client, userdata, message):
     queue.put({"topico": topico, "mensaje": mensaje})
 
 
+# Aquí crear el callback procesamiento_local (Consumidor) y mandar a la nube.
 # Aquí crear el callback procesamiento_local
+def procesamiento_local(name, flags, client_local, client_remoto):
+    print("Comienza thread", name)
+    queue = client_local._userdata["queue"]
 
+    while flags["thread_continue"]:
+        # Queue de python ya resuelve automaticamente el concepto
+        # de consumidor con "get".
+        # En este caso el sistema esperará (block=True) hasta que haya
+        # al menos un item disponible para leer        
+        msg = queue.get(block=True)
+
+        # Sino hay nada por leer, vuelvo a esperar por otro mensaje
+        if msg is None:
+            continue
+
+        # Hay datos para leer, los consumo e imprimo en consola
+        print(f"mensaje recibido en thread {name}:")
+        print(f"{msg['topico']}: {msg['mensaje']}")
+        topico = msg['topico']
+        mensaje = msg['mensaje']
+        
+        topico_remoto = config["DASHBOARD_TOPICO_BASE"] + topico
+        print("enviando el topico a la nube",topico_remoto)
+        print("enviando el mensaje",mensaje)
+
+        client_remoto.publish(topico_remoto, mensaje)
+
+    print("Termina thread", name)
 # ----------------------
 # ----------------------
 # Aquí crear los callbacks de MQTT Remoto
@@ -49,7 +78,6 @@ def on_connect_remoto(client, userdata, flags, rc):
         # Aquí Suscribirse a los topicos remotos deseados
     else:
         print(f"Mqtt Remoto connection faild, error code={rc}")
-
 # ----------------------
 
 # Flags que almacenaremos para todos los threads en comun
@@ -57,6 +85,10 @@ def on_connect_remoto(client, userdata, flags, rc):
 # Recordar que no se debe pasar al threads variables tipo bool, int o string,
 # siempre usar un objeto (como en este caso un diccionario)
 flags = {"thread_continue": True}
+def finalizar_programa(sig, frame):
+    global flags
+    print("Señal de terminar programa")    
+    flags["thread_continue"] = False
 
 
 if __name__ == "__main__":    
@@ -93,12 +125,15 @@ if __name__ == "__main__":
 
 
     # El programa principal solo armará e invocará threads
+    print("Lanzar thread de procesamiento de MQTT local")
+    thread_consumidor_remoto = threading.Thread(target=procesamiento_local, args=("procesamiento_local", flags, client_local, client_remoto), daemon=True)
+    thread_consumidor_remoto.start()
 
 
     # ----------------------
     # El programa principal queda a la espera de que se desee
     # finalizar el programa
-    while True:
+    while flags["thread_continue"]:
         pass
 
     print("Comenzando la finalización de los threads...")

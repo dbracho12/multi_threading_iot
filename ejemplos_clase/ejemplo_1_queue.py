@@ -27,13 +27,14 @@ def on_connect_local(client, userdata, flags, rc):
         print(f"Mqtt Local connection faild, error code={rc}")
 
 
-# Aquí crear el callback on_message_local
+# Aquí crear el callback on_message_local recibir paquete mqtt local
 def on_message_local(client, userdata, message):
-    queue = userdata["queue"]
+    queue = userdata["queue"]#client_local.user_data_set({"queue": queue_local}) 
     topico = message.topic
     mensaje = str(message.payload.decode("utf-8"))
-
+    
     # Agregar cada nuevo mensaje a la queue (put)
+    queue.put({"topico": topico, "mensaje": mensaje})
 
 
 # ----------------------
@@ -50,7 +51,11 @@ def on_connect_remoto(client, userdata, flags, rc):
 
 # ----------------------
 
-if __name__ == "__main__":    
+if __name__ == "__main__":  
+    # Paso1 crear una queue para el cliente local --> queue_local
+    queue_local = Queue()
+    #queue_remoto = Queue() para el remoto
+
     # ----------------------
     # Aquí conectarse a MQTT remoto
     random_id = random.randint(1, 999)
@@ -69,7 +74,8 @@ if __name__ == "__main__":
     client_local.on_connect = on_connect_local
     client_local.on_message = on_message_local
 
-    # Dejar disponible la queue dentro de "user_data"
+    # Paso 2 Dejar disponible la queue dentro de "user_data"
+    client_local.user_data_set({"queue": queue_local})
 
     client_local.connect(config["BROKER"], int(config["PORT"]))
     client_local.loop_start()
@@ -78,7 +84,12 @@ if __name__ == "__main__":
     # El programa principal quedará a la espera
     # de que llegue un nuevo mensaje MQTT
     while True:
-        pass
+        msg = queue_local.get(block=True)
+        # Hay datos para leer, los consumo e imprimo en consola
+        #topico = msg['topico']
+        #mensaje = msg['mensaje']
+        #print(f"{msg['topico']}: {msg['mensaje']}")
+        print(msg)
     
     client_local.disconnect()
     client_local.loop_stop()

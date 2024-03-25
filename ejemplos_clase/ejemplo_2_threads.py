@@ -32,3 +32,7 @@ if __name__ == "__main__":
     # No puedo finalizar el programa sin que hayan terminado los threads
     # el "join" espera por la conclusion de cada thread, debo lanzar el join
     # por cada uno
+    print("Espero que termine thread one")
+    thread1.join()
+    print("Espero que termine thread two")
+    thread2.join()
