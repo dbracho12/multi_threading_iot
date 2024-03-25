@@ -95,7 +95,7 @@ def procesamiento_remoto(name,queue_remoto,client_local, flags):
         topico_local = topico.replace(config["DASHBOARD_TOPICO_BASE"], '')
         # Agregar el destintivo de que el mensaje viene del dashboard
         topico_local = "dashboardiot/" + topico_local
-        #--------analisis del keepalive-------------
+        #--------analisis del keepalive-------------#
         if topico == "monitoreo/keepalive/request":
             client_remoto.publish("keepalive/ack", 1)
         print("Dato recibido de espacio -topico:", topico_local)
